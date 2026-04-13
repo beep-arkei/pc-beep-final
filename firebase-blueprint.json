@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "Profile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "role": { "type": "string", "enum": ["buyer", "admin", "owner"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "role"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Computer component or peripheral",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "stock_quantity": { "type": "integer" },
+        "category": { "type": "string" },
+        "specs": { "type": "object" },
+        "image_url": { "type": "string", "format": "uri" },
+        "gallery_urls": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "is_unlisted": { "type": "boolean" }
+      },
+      "required": ["name", "price", "category"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer purchase or build order",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "processing", "completed", "cancelled"] },
+        "total_amount": { "type": "number" },
+        "order_type": { "type": "string", "enum": ["buy", "build"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "status", "total_amount", "order_type"]
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": "Profile",
+      "description": "User profile data"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Product catalog"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer orders"
+    },
+    "/orders/{orderId}/items/{itemId}": {
+      "schema": "object",
+      "description": "Items within an order"
+    }
+  }
+}

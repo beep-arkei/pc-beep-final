@@ -1,0 +1,9 @@
+{
+  "name": "PC Beep",
+  "description": "A dual-service e-commerce platform for computer components and custom PC assembly in the Philippines.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
