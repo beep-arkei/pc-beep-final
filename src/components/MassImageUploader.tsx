@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, X, Check, AlertCircle, Loader2, Image as ImageIcon, Trash2, Save } from 'lucide-react';
+import { Upload, X, Check, AlertCircle, Loader2, Image as ImageIcon, Trash2, Save, ChevronDown, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Product } from '../types';
 import imageCompression from 'browser-image-compression';
@@ -23,6 +23,8 @@ export const MassImageUploader: React.FC = () => {
   const [products, setProducts] = useState<Pick<Product, 'id' | 'name'>[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [stats, setStats] = useState({ success: 0, fail: 0, total: 0 });
+  const [activeSelectorId, setActiveSelectorId] = useState<string | null>(null);
+  const [productSearch, setProductSearch] = useState('');
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -32,6 +34,16 @@ export const MassImageUploader: React.FC = () => {
     };
     fetchProducts();
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (activeSelectorId && !(e.target as HTMLElement).closest('.relative')) {
+        setActiveSelectorId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeSelectorId]);
 
   const smartMatch = useCallback((fileName: string): { productId: string | null, type: 'thumbnail' | 'gallery' } => {
     const lowerName = fileName.toLowerCase();
@@ -250,19 +262,69 @@ export const MassImageUploader: React.FC = () => {
 
                 <div className="space-y-1">
                   <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Matched Product</p>
-                  <select
-                    value={staged.matchedProductId || ''}
-                    onChange={(e) => updateStagedFile(staged.id, { matchedProductId: e.target.value })}
-                    className={cn(
-                      "w-full bg-slate-950 border px-2 py-1.5 text-[10px] font-bold outline-none transition-colors",
-                      staged.matchedProductId ? "border-slate-800 text-white" : "border-rose-500/50 text-rose-400"
+                  <div className="relative">
+                    <button 
+                      onClick={() => {
+                        setActiveSelectorId(activeSelectorId === staged.id ? null : staged.id);
+                        setProductSearch('');
+                      }}
+                      className={cn(
+                        "w-full bg-slate-950 border px-2 py-1.5 text-[10px] font-bold outline-none transition-colors text-left flex justify-between items-center group",
+                        staged.matchedProductId ? "border-slate-800 text-white" : "border-rose-500/50 text-rose-400"
+                      )}
+                    >
+                      <span className="truncate">
+                        {products.find(p => p.id === staged.matchedProductId)?.name || "Manual Assignment Required"}
+                      </span>
+                      <ChevronDown size={10} className={cn("transition-transform", activeSelectorId === staged.id && "rotate-180")} />
+                    </button>
+                    
+                    {activeSelectorId === staged.id && (
+                      <div className="absolute z-50 bottom-full left-0 right-0 mb-1 bg-slate-900 border border-slate-800 shadow-2xl max-h-64 overflow-hidden flex flex-col">
+                        <div className="p-2 border-b border-slate-800 bg-slate-950">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600" size={10} />
+                            <input 
+                              autoFocus
+                              type="text"
+                              value={productSearch}
+                              onChange={(e) => setProductSearch(e.target.value)}
+                              placeholder="Search products..."
+                              className="w-full bg-slate-900 border border-slate-800 pl-7 pr-2 py-1.5 text-[10px] outline-none focus:border-cyan text-white"
+                            />
+                          </div>
+                        </div>
+                        <div className="overflow-y-auto flex-1 custom-scrollbar bg-slate-950">
+                          <button
+                            onClick={() => { updateStagedFile(staged.id, { matchedProductId: null }); setActiveSelectorId(null); setProductSearch(''); }}
+                            className="w-full text-left px-3 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-white/5 text-rose-500 border-b border-slate-900"
+                          >
+                            Clear Assignment
+                          </button>
+                          {products
+                            .filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                            .map(p => (
+                              <button
+                                key={p.id}
+                                onClick={() => { updateStagedFile(staged.id, { matchedProductId: p.id }); setActiveSelectorId(null); setProductSearch(''); }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 text-[10px] font-bold hover:bg-white/5 transition-colors",
+                                  staged.matchedProductId === p.id ? "text-cyan bg-cyan/5" : "text-slate-400"
+                                )}
+                              >
+                                {p.name}
+                              </button>
+                            ))
+                          }
+                          {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).length === 0 && (
+                            <div className="px-3 py-4 text-center text-[10px] text-slate-600 uppercase tracking-widest font-bold">
+                              No products found
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
-                  >
-                    <option value="">Manual Assignment Required</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+                  </div>
                 </div>
 
                 {!staged.matchedProductId && (
