@@ -171,6 +171,12 @@ export const ProductDetails: React.FC = () => {
                     className="w-full h-full object-cover" 
                     referrerPolicy="no-referrer" 
                     loading="lazy"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      if (img && target.src !== img) {
+                        target.src = img;
+                      }
+                    }}
                   />
                 </button>
               ))}
