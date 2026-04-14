@@ -17,13 +17,26 @@ const PORT = 3000;
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 // Supabase Admin Client (Service Role Key)
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error("MISSING SUPABASE CONFIGURATION. Server may not function correctly.");
+}
+
 const supabaseAdmin = createClient(
-  process.env.VITE_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  supabaseUrl || "https://placeholder.supabase.co",
+  supabaseServiceKey || "placeholder-key"
 );
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Health Check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 // 1. Send OTP Endpoint
 app.post("/api/auth/send-otp", async (req, res) => {
@@ -142,6 +155,7 @@ app.post("/api/auth/verify-otp", async (req, res) => {
 
 // 3. Beep Bot Chat Endpoint (Stateful)
 app.post("/api/chat", async (req, res) => {
+  console.log("Chat request received:", req.body);
   const { message, chatId, userId } = req.body;
   if (!message || !userId) return res.status(400).json({ error: "Message and User ID are required" });
 
