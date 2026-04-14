@@ -8,11 +8,14 @@ import { ProductCard } from '../components/ProductCard';
 import { PromoCarousel } from '../components/PromoCarousel';
 import { Star, Award, Monitor, MousePointer2 } from 'lucide-react';
 
+import { getOptimizedImageUrl } from '../lib/storage';
+
 export const Home: React.FC = () => {
   const navigate = useNavigate();
   const [newProducts, setNewProducts] = useState<Product[]>([]);
   const [deals, setDeals] = useState<Product[]>([]);
   const [topRated, setTopRated] = useState<Product[]>([]);
+  const [featuredBuild, setFeaturedBuild] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [homeSearch, setHomeSearch] = useState('');
 
@@ -26,30 +29,17 @@ export const Home: React.FC = () => {
   useEffect(() => {
     const fetchHomeData = async () => {
       try {
-        const { data: newItems } = await supabase
-          .from('products')
-          .select('*')
-          .eq('is_new', true)
-          .eq('is_unlisted', false)
-          .limit(4);
+        const [newRes, dealRes, topRes, featuredRes] = await Promise.all([
+          supabase.from('products').select('*').eq('is_new', true).eq('is_unlisted', false).limit(4),
+          supabase.from('products').select('*').eq('is_deal', true).eq('is_unlisted', false).limit(4),
+          supabase.from('products').select('*').eq('is_unlisted', false).order('price', { ascending: false }).limit(4),
+          supabase.from('products').select('*').eq('id', '98ae69c3-304c-4b0e-ac39-8188b72f67b7').single()
+        ]);
         
-        const { data: dealItems } = await supabase
-          .from('products')
-          .select('*')
-          .eq('is_deal', true)
-          .eq('is_unlisted', false)
-          .limit(4);
-
-        const { data: topItems } = await supabase
-          .from('products')
-          .select('*')
-          .eq('is_unlisted', false)
-          .order('price', { ascending: false }) // Mocking top rated with price for now
-          .limit(4);
-
-        if (newItems) setNewProducts(newItems);
-        if (dealItems) setDeals(dealItems);
-        if (topItems) setTopRated(topItems);
+        if (newRes.data) setNewProducts(newRes.data);
+        if (dealRes.data) setDeals(dealRes.data);
+        if (topRes.data) setTopRated(topRes.data);
+        if (featuredRes.data) setFeaturedBuild(featuredRes.data);
       } catch (error) {
         console.error('Error fetching home data:', error);
       } finally {
@@ -165,11 +155,17 @@ export const Home: React.FC = () => {
       {/* Build of the Month */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-slate-900 border border-slate-800 rounded-sm overflow-hidden flex flex-col lg:flex-row">
-          <div className="lg:w-1/2 relative h-[400px] lg:h-auto">
+          <div className="lg:w-1/2 relative h-[500px] lg:h-auto">
             <img 
-              src="https://images.unsplash.com/photo-1591488320449-011701bb6704?auto=format&fit=crop&q=80&w=1200" 
-              alt="Build of the Month" 
+              src={getOptimizedImageUrl(featuredBuild?.image_url, { width: 1200, height: 800 })} 
+              alt="Beppu's Actual PC Full Setup" 
               className="w-full h-full object-cover"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                if (featuredBuild?.image_url && target.src !== featuredBuild.image_url) {
+                  target.src = featuredBuild.image_url;
+                }
+              }}
             />
             <div className="absolute top-6 left-6">
               <div className="bg-cyan text-navy text-[10px] font-black px-4 py-2 rounded-sm uppercase tracking-widest flex items-center gap-2 shadow-xl">
@@ -178,28 +174,45 @@ export const Home: React.FC = () => {
             </div>
           </div>
           <div className="lg:w-1/2 p-12 flex flex-col justify-center">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="h-px w-8 bg-cyan" />
+              <span className="text-[10px] font-black text-cyan uppercase tracking-[0.2em]">Featured Configuration</span>
+            </div>
             <h2 className="text-4xl font-black text-white uppercase tracking-tighter leading-none mb-6">
-              THE <span className="text-cyan">NEON VANGUARD</span>
+              BEPPU'S <span className="text-cyan">ACTUAL PC</span> <br /> FULL SETUP
             </h2>
             <p className="text-slate-400 font-medium mb-8 leading-relaxed">
-              A masterpiece of performance and aesthetics. Featuring the RTX 4090 and Ryzen 9 7950X3D, housed in a custom-looped Lian Li O11 Dynamic EVO.
+              A balanced powerhouse optimized for high-refresh 1440p gaming and professional workflows. Featuring the latest RDNA 5 architecture and a clean mATX aesthetic.
             </p>
-            <div className="grid grid-cols-2 gap-6 mb-10">
+            <div className="grid grid-cols-2 gap-y-6 gap-x-8 mb-10">
               <div className="border-l-2 border-cyan pl-4">
                 <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Processor</div>
-                <div className="text-sm font-bold text-white">Ryzen 9 7950X3D</div>
+                <div className="text-sm font-bold text-white">Ryzen 5 7500F</div>
               </div>
               <div className="border-l-2 border-cyan pl-4">
                 <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Graphics</div>
-                <div className="text-sm font-bold text-white">RTX 4090 24GB</div>
+                <div className="text-sm font-bold text-white">RX 9070 16GB OC</div>
+              </div>
+              <div className="border-l-2 border-cyan pl-4">
+                <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Memory</div>
+                <div className="text-sm font-bold text-white">32GB Cras V RGB White</div>
+              </div>
+              <div className="border-l-2 border-cyan pl-4">
+                <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Value</div>
+                <div className="text-sm font-bold text-cyan">₱127,850</div>
               </div>
             </div>
-            <Link 
-              to="/builder" 
-              className="inline-flex items-center gap-3 text-cyan font-black text-xs uppercase tracking-widest group"
-            >
-              View Full Specs <ArrowRight size={16} className="group-hover:translate-x-2 transition-transform" />
-            </Link>
+            <div className="flex flex-wrap gap-4">
+              <Link 
+                to="/builder" 
+                className="inline-flex items-center gap-3 bg-cyan text-navy px-6 py-3 rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-white transition-all group"
+              >
+                Replicate this Build <ArrowRight size={16} className="group-hover:translate-x-2 transition-transform" />
+              </Link>
+              <button className="inline-flex items-center gap-3 border border-slate-700 text-slate-400 px-6 py-3 rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 hover:text-white transition-all">
+                View Setup Gallery
+              </button>
+            </div>
           </div>
         </div>
       </section>
