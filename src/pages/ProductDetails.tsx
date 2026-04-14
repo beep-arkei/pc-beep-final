@@ -116,11 +116,14 @@ export const ProductDetails: React.FC = () => {
                   <img 
                     src={getOptimizedImageUrl(displayImage, { width: 800, height: 800 })} 
                     alt={product.name} 
-                    className={cn(
-                      "w-full h-full object-contain transition-transform duration-200",
-                      isZooming && "opacity-0"
-                    )}
+                    className="w-full h-full object-contain transition-transform duration-200"
                     referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      if (displayImage && target.src !== displayImage) {
+                        target.src = displayImage;
+                      }
+                    }}
                   />
                   {isZooming && (
                     <div 
