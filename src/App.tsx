@@ -83,6 +83,7 @@ export default function App() {
         
         if (upsertError) {
           console.error('Error syncing profile to database:', upsertError);
+          // If upsert fails (likely RLS), we still use the local profile so the app remains usable
         }
       }
       
