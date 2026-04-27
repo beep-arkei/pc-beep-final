@@ -43,6 +43,10 @@ CREATE TABLE orders (
   fulfilled_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   payment_proof_url TEXT,
   special_instructions TEXT,
+  shipping_address TEXT,
+  shipping_fee NUMERIC DEFAULT 0,
+  latitude NUMERIC,
+  longitude NUMERIC,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
@@ -89,15 +93,15 @@ CREATE POLICY "Admins can update products" ON products FOR UPDATE USING (is_admi
 CREATE POLICY "Admins can delete products" ON products FOR DELETE USING (is_admin());
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Profiles SELECT" ON profiles FOR SELECT USING (auth.uid() = id OR is_admin());
-CREATE POLICY "Profiles INSERT" ON profiles FOR INSERT WITH CHECK (auth.uid() = id OR is_owner());
-CREATE POLICY "Profiles UPDATE" ON profiles FOR UPDATE USING (is_owner() OR (auth.uid() = id AND (SELECT role FROM profiles WHERE id = auth.uid()) = role));
+CREATE POLICY "Profiles SELECT" ON profiles FOR SELECT USING (true);
+CREATE POLICY "Profiles INSERT" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "Profiles UPDATE" ON profiles FOR UPDATE USING (auth.uid() = id OR is_admin());
 CREATE POLICY "Profiles DELETE" ON profiles FOR DELETE USING (is_owner());
 
 -- RLS Policies for Orders
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view their own orders" ON orders FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can create their own orders" ON orders FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can create their own orders" ON orders FOR INSERT WITH CHECK (auth.uid() = user_id OR is_admin());
 CREATE POLICY "Users can update their own orders for refunds" ON orders FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (status = 'refund_requested');
 CREATE POLICY "Admins can view all orders" ON orders FOR SELECT USING (is_admin());
 CREATE POLICY "Admins can update all orders" ON orders FOR UPDATE USING (is_admin());
@@ -112,6 +116,7 @@ CREATE POLICY "Users can view their own order items" ON order_items FOR SELECT U
   )
 );
 CREATE POLICY "Users can create their own order items" ON order_items FOR INSERT WITH CHECK (
+  is_admin() OR
   EXISTS (
     SELECT 1 FROM orders
     WHERE orders.id = order_items.order_id
