@@ -13,6 +13,7 @@ import { uploadChatAttachment } from '../lib/storage';
 import { BeepBotMascot } from './BeepBotMascot';
 
 interface Message {
+  id?: string;
   role: 'user' | 'bot' | 'admin';
   text: string;
   created_at?: string;
@@ -31,6 +32,8 @@ export const BeepBot: React.FC = () => {
   const [isAiActive, setIsAiActive] = useState(true);
   const [chatStatus, setChatStatus] = useState('active');
   const [uploading, setUploading] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<{ status: number, statusText: string, url: string, bodySnippet?: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -96,9 +99,13 @@ export const BeepBot: React.FC = () => {
             return newMsgs;
           }
 
-          if (prev.some(m => m.created_at === newMessage.created_at && m.text === newMessage.text)) {
+          if (prev.some(m => m.id === newMessage.id)) return prev;
+          
+          // Fallback duplicate check for messages without IDs yet
+          if (prev.some(m => m.text === newMessage.text && m.role === newMessage.role && m.created_at === newMessage.created_at)) {
             return prev;
           }
+          
           return [...prev, newMessage];
         });
         // Auto-scroll on new message
@@ -151,8 +158,21 @@ export const BeepBot: React.FC = () => {
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to send message');
+      let data;
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // Handle non-JSON responses (usually HTML error pages)
+        const text = await response.text();
+        console.error('Non-JSON response received:', text);
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to send message');
+      }
 
       const activeChatId = data.chatId;
       if (activeChatId && !chatId) {
@@ -172,15 +192,41 @@ export const BeepBot: React.FC = () => {
 
         if (botText) {
           // 3. Save AI response to Supabase
-          await supabase.from('chat_messages').insert({
-            chat_id: activeChatId,
-            role: 'bot',
-            text: botText
-          });
+          const { data: savedMsg, error: insertError } = await supabase
+            .from('chat_messages')
+            .insert({
+              chat_id: activeChatId,
+              role: 'bot',
+              text: botText
+            })
+            .select()
+            .single();
+          
+          if (savedMsg && !insertError) {
+            setMessages(prev => {
+              if (prev.some(m => m.id === savedMsg.id)) return prev;
+              return [...prev, savedMsg];
+            });
+          } else if (botText) {
+            // Fallback if select fails
+            setMessages(prev => [...prev, { role: 'bot', text: botText, created_at: new Date().toISOString() }]);
+          }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Chat error:', error);
+      
+      // Detailed error diagnostic for Vercel/API 404s
+      if (error.message && (error.message.includes('404') || error.message.includes('Unexpected token'))) {
+        setErrorDetails({
+          status: 404,
+          statusText: 'Not Found',
+          url: '/api/chat',
+          bodySnippet: error.message
+        });
+        setShowErrorModal(true);
+      }
+
       setMessages(prev => prev.map(m => 
         (m.text === textToSend && m.status === 'sending') ? { ...m, status: 'error' } : m
       ));
@@ -386,6 +432,69 @@ export const BeepBot: React.FC = () => {
           )}
         </div>
       </button>
+
+      {/* Error Diagnostic Modal */}
+      <AnimatePresence>
+        {showErrorModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-navy/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-sm shadow-2xl max-w-md w-full overflow-hidden"
+            >
+              <div className="bg-rose-500 p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-white">
+                  <X size={20} className="bg-white/20 rounded-full p-1" />
+                  <h3 className="font-black uppercase tracking-tighter text-sm">Connection Error Detected</h3>
+                </div>
+                <button onClick={() => setShowErrorModal(false)} className="text-white/80 hover:text-white">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <div className="bg-slate-100 p-3 rounded-sm font-mono text-[10px] text-slate-600">
+                  <p><strong>URL:</strong> /api/chat</p>
+                  <p><strong>Status:</strong> 404 (Not Found)</p>
+                  <p><strong>Hint:</strong> Vercel is serving an HTML page instead of the API.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="font-bold text-navy text-xs uppercase tracking-widest">Why is this happening?</h4>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    The backend service at <strong>/api/chat</strong> is unreachable. This usually happens on Vercel if the <strong>Environment Variables</strong> are missing or if the API routing hasn't been deployed correctly.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="font-bold text-navy text-xs uppercase tracking-widest">How to fix it:</h4>
+                  <ol className="text-xs text-slate-600 space-y-2 list-decimal pl-4">
+                    <li>
+                      Ensure you have added <strong>SUPABASE_SERVICE_ROLE_KEY</strong> to your Vercel Project Settings.
+                    </li>
+                    <li>
+                      Make sure your <strong>vercel.json</strong> includes the correct rewrites for API paths.
+                    </li>
+                    <li>
+                      Check your Vercel logs to see if the serverless function failed to initialize.
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="pt-2">
+                  <button 
+                    onClick={() => setShowErrorModal(false)}
+                    className="w-full bg-navy text-white py-2 rounded-sm text-xs font-bold uppercase tracking-widest hover:bg-navy/90 transition-colors"
+                  >
+                    Got it, I'll check settings
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
