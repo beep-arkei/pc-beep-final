@@ -33,7 +33,19 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Middleware to log requests (useful for debugging Vercel routing)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api') || process.env.VERCEL) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} (Original: ${req.originalUrl})`);
+  }
+  next();
+});
+
 // Health Check
+app.get("/api", (req, res) => {
+  res.json({ message: "PC Beep API is running", version: "1.0.0" });
+});
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
@@ -154,7 +166,7 @@ app.post("/api/auth/verify-otp", async (req, res) => {
 });
 
 // 3. Beep Bot Chat Endpoint (Stateful)
-app.post("/api/chat", async (req, res) => {
+const chatHandler = async (req: any, res: any) => {
   console.log("Chat request received:", req.body);
   const { message, chatId, userId } = req.body;
   if (!message || !userId) return res.status(400).json({ error: "Message and User ID are required" });
@@ -200,7 +212,10 @@ app.post("/api/chat", async (req, res) => {
     console.error("Error in chat:", error);
     res.status(500).json({ error: error.message });
   }
-});
+};
+
+app.post("/api/chat", chatHandler);
+app.post("/chat", chatHandler);
 
 // 4. Support Form Endpoint
 app.post("/api/support/send", async (req, res) => {
@@ -642,6 +657,29 @@ app.delete("/api/owner/employees/:id", isOwner, async (req, res) => {
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// --- API ROUTES END ---
+
+// 404 Handler for API
+app.use("/api/*", (req, res) => {
+  res.status(404).json({ 
+    error: "API endpoint not found",
+    path: req.originalUrl,
+    method: req.method
+  });
+});
+
+// Global Error Handler for API
+app.use((err: any, req: any, res: any, next: any) => {
+  if (req.path.startsWith("/api/")) {
+    console.error("API Error:", err);
+    return res.status(err.status || 500).json({
+      error: err.message || "Internal Server Error",
+      code: err.code
+    });
+  }
+  next(err);
 });
 
 async function startServer() {
