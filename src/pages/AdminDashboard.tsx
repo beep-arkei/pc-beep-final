@@ -7,6 +7,7 @@ import { logActivity } from '../lib/activity';
 import { useStore } from '../store/useStore';
 import { Product, Order, Profile, Chat, ChatMessage, Refund, RefundStatus, Promotion } from '../types';
 import { uploadToSupabase, getOptimizedImageUrl, DEFAULT_PLACEHOLDER, uploadPromotionBanner } from '../lib/storage';
+import { ProductImage } from '../components/ProductImage';
 import { StorageBrowser } from '../components/StorageBrowser';
 import { ReceiptView } from '../components/ReceiptView';
 import { Reports } from './Reports';
@@ -243,6 +244,7 @@ export const AdminDashboard: React.FC = () => {
   
   const [mainImageUrl, setMainImageUrl] = useState('');
   const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
+  const [productSpecs, setProductSpecs] = useState<{key: string, value: string}[]>([]);
   const [uploadingMain, setUploadingMain] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
 
@@ -749,9 +751,7 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     if (selectedChatId) {
-      fetchChatMessages(selectedChatId);
-      
-      // Subscribe to new messages
+      // Create a single channel for this chat
       const channel = supabase
         .channel(`admin_chat:${selectedChatId}`)
         .on('postgres_changes', { 
@@ -779,7 +779,13 @@ export const AdminDashboard: React.FC = () => {
             return [...prev, newMessage];
           });
         })
-        .subscribe();
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log(`Subscribed to chat messages: ${selectedChatId}`);
+            // Fetch initial messages AFTER subscription is active to prevent missing messages
+            fetchChatMessages(selectedChatId);
+          }
+        });
       
       return () => {
         supabase.removeChannel(channel);
@@ -806,7 +812,13 @@ export const AdminDashboard: React.FC = () => {
       is_unlisted: formData.get('is_unlisted') === 'on',
       discount_price: formData.get('discount_price') ? Number(formData.get('discount_price')) : null,
       promotion_label: formData.get('promotion_label') as string || null,
-      specs: editingProduct?.specs || {}
+      detailed_specs: formData.get('detailed_specs') as string || null,
+      specs: productSpecs.reduce((acc, curr) => {
+        if (curr.key.trim()) {
+          acc[curr.key.trim()] = curr.value;
+        }
+        return acc;
+      }, {} as Record<string, string>)
     };
 
     try {
@@ -1032,6 +1044,7 @@ export const AdminDashboard: React.FC = () => {
     setEditingProduct(null);
     setMainImageUrl('');
     setGalleryUrls([]);
+    setProductSpecs([]);
     setIsModalOpen(true);
   };
 
@@ -1041,6 +1054,13 @@ export const AdminDashboard: React.FC = () => {
     const cleanImageUrl = product.image_url && !product.image_url.includes('picsum.photos') ? product.image_url : '';
     setMainImageUrl(cleanImageUrl);
     setGalleryUrls(product.gallery_urls?.filter(url => !url.includes('picsum.photos')) || []);
+    
+    // Convert Record specs to Array for editing
+    const specsArray = Object.entries(product.specs || {}).map(([key, value]) => ({
+      key,
+      value: String(value)
+    }));
+    setProductSpecs(specsArray);
     setIsModalOpen(true);
   };
 
@@ -1367,18 +1387,14 @@ export const AdminDashboard: React.FC = () => {
                         <tr key={product.id} className="group hover:bg-white/5 transition-colors">
                           <td className="py-5 px-6 pl-8">
                             <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-slate-800 rounded-sm shrink-0 overflow-hidden flex items-center justify-center border border-slate-700">
-                                {product.image_url && !product.image_url.includes('picsum.photos') ? (
-                                  <img 
-                                    src={getOptimizedImageUrl(product.image_url, { width: 100, height: 100 })} 
-                                    alt={product.name} 
-                                    className="w-full h-full object-cover"
-                                    referrerPolicy="no-referrer"
-                                    loading="lazy"
-                                  />
-                                ) : (
-                                  <Package size={20} className="text-slate-600" />
-                                )}
+                              <div className="w-12 h-12 rounded-sm shrink-0 overflow-hidden flex items-center justify-center border border-slate-700">
+                                <ProductImage 
+                                  src={product.image_url} 
+                                  alt={product.name} 
+                                  className="w-full h-full object-cover"
+                                  width={100}
+                                  height={100}
+                                />
                               </div>
                               <div className="flex flex-col">
                                 <span className="font-bold text-white text-sm">{product.name}</span>
@@ -1513,42 +1529,42 @@ export const AdminDashboard: React.FC = () => {
                                   </button>
                                 )}
 
-                                {order.status === 'in_transit' && (
+                                 {order.status === 'in_transit' && (
                                   <button 
                                     onClick={() => handleUpdateOrderStatus(order.id, 'out_for_delivery')}
-                                    className="p-2 text-cyan hover:text-cyan/80 transition-colors"
-                                    title="Out for Delivery"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-cyan hover:bg-cyan/10 rounded-sm border border-transparent hover:border-cyan/20 transition-all"
                                   >
-                                    <MapPin size={16} />
+                                    <MapPin size={12} />
+                                    <span>Deliver</span>
                                   </button>
                                 )}
 
                                 {order.status === 'out_for_delivery' && (
                                   <button 
                                     onClick={() => handleUpdateOrderStatus(order.id, 'delivered')}
-                                    className="p-2 text-green-500 hover:text-green-400 transition-colors"
-                                    title="Mark Delivered"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-green-500 hover:bg-green-500/10 rounded-sm border border-transparent hover:border-green-500/20 transition-all"
                                   >
-                                    <CheckCircle2 size={16} />
+                                    <CheckCircle2 size={12} />
+                                    <span>Complete</span>
                                   </button>
                                 )}
 
                                 {order.status !== 'cancelled' && order.status !== 'delivered' && order.status !== 'refunded' && (
                                   <button 
                                     onClick={() => setShowCancelModal(order.id)}
-                                    className="p-2 text-red-500 hover:text-red-400 transition-colors"
-                                    title="Cancel Order"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-red-500 hover:bg-red-500/10 rounded-sm border border-transparent hover:border-red-500/20 transition-all"
                                   >
-                                    <Ban size={16} />
+                                    <Ban size={12} />
+                                    <span>Cancel</span>
                                   </button>
                                 )}
 
                                 <button 
                                   onClick={() => setSelectedOrderId(order.id)}
-                                  className="p-2 text-slate-500 hover:text-white transition-colors"
-                                  title="View Receipt"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white hover:bg-white/10 rounded-sm border border-transparent hover:border-white/20 transition-all"
                                 >
-                                  <FileText size={16} />
+                                  <FileText size={12} />
+                                  <span>Receipt</span>
                                 </button>
                               </div>
                             </td>
@@ -2332,11 +2348,10 @@ CREATE POLICY "Admins can view all order items" ON order_items FOR SELECT USING 
                     <div className="flex flex-col gap-4">
                       {mainImageUrl && (
                         <div className="relative w-full h-40 bg-slate-950 rounded-sm overflow-hidden border border-slate-800">
-                          <img 
+                          <ProductImage 
                             src={mainImageUrl} 
                             alt="Preview" 
-                            className="w-full h-full object-contain grayscale"
-                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-contain"
                           />
                           <button 
                             type="button"
@@ -2382,6 +2397,65 @@ CREATE POLICY "Admins can view all order items" ON order_items FOR SELECT USING 
                 </div>
 
                 <div className="space-y-3">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Specifications</label>
+                  <div className="space-y-4 p-6 bg-slate-950/50 border border-slate-800 rounded-sm">
+                    {productSpecs.map((spec, idx) => (
+                      <div key={idx} className="flex gap-4">
+                        <input 
+                          type="text"
+                          value={spec.key}
+                          onChange={(e) => {
+                            const newSpecs = [...productSpecs];
+                            newSpecs[idx].key = e.target.value;
+                            setProductSpecs(newSpecs);
+                          }}
+                          placeholder="Spec Name (e.g. Socket)"
+                          className="flex-1 px-4 py-2 bg-slate-950 border border-slate-800 rounded-sm text-xs focus:ring-1 focus:ring-cyan outline-none text-white font-bold"
+                        />
+                        <input 
+                          type="text"
+                          value={spec.value}
+                          onChange={(e) => {
+                            const newSpecs = [...productSpecs];
+                            newSpecs[idx].value = e.target.value;
+                            setProductSpecs(newSpecs);
+                          }}
+                          placeholder="Value (e.g. AM5)"
+                          className="flex-1 px-4 py-2 bg-slate-950 border border-slate-800 rounded-sm text-xs focus:ring-1 focus:ring-cyan outline-none text-white"
+                        />
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setProductSpecs(productSpecs.filter((_, i) => i !== idx));
+                          }}
+                          className="p-2 text-red-500 hover:bg-red-500/10 rounded-sm transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))}
+                    <button 
+                      type="button"
+                      onClick={() => setProductSpecs([...productSpecs, { key: "", value: "" }])}
+                      className="w-full py-3 border border-dashed border-slate-800 rounded-sm text-[10px] font-black text-slate-500 uppercase tracking-widest hover:border-cyan hover:text-cyan transition-all flex items-center justify-center gap-2"
+                    >
+                      <Plus size={14} /> Add Specification
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Detailed Specifications (Markdown Support)</label>
+                  <textarea 
+                    name="detailed_specs"
+                    defaultValue={editingProduct?.detailed_specs}
+                    rows={6}
+                    placeholder="Technical details, dimensions, warranties, etc. (Supports Markdown)"
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-sm text-sm focus:ring-1 focus:ring-cyan outline-none resize-none text-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-3">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Description</label>
                   <textarea 
                     name="description"
@@ -2396,11 +2470,10 @@ CREATE POLICY "Admins can view all order items" ON order_items FOR SELECT USING 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
                     {galleryUrls.map((url, index) => (
                       <div key={index} className="relative aspect-square bg-slate-950 rounded-sm overflow-hidden border border-slate-800">
-                        <img 
+                        <ProductImage 
                           src={url} 
                           alt={`Gallery ${index}`} 
-                          className="w-full h-full object-cover grayscale"
-                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
                         />
                         <button 
                           type="button"
