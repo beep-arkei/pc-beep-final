@@ -29,6 +29,7 @@ export interface Product {
   is_unlisted?: boolean;
   discount_price?: number;
   promotion_label?: string;
+  detailed_specs?: string;
   created_at?: string;
 }
 
