@@ -8,13 +8,16 @@ import { Product } from '../types';
 import { cn } from '../lib/utils';
 import { getOptimizedImageUrl, DEFAULT_PLACEHOLDER } from '../lib/storage';
 import { ProductCard } from '../components/ProductCard';
+import { ProductImage } from '../components/ProductImage';
+import ReactMarkdown from 'react-markdown';
 
 export const ProductDetails: React.FC = () => {
   const { id } = useParams();
   const { user, addToCart } = useStore();
   const isAdmin = user?.role === 'admin' || user?.role === 'owner';
   const [product, setProduct] = useState<Product | null>(null);
-  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
+  const [frequentlyBoughtTogether, setFrequentlyBoughtTogether] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'specs' | 'warranty' | 'reviews'>('specs');
@@ -37,16 +40,44 @@ export const ProductDetails: React.FC = () => {
           setProduct(data);
           setActiveImage(data.image_url);
 
-          // Fetch related products (same category)
-          const { data: related } = await supabase
+          // Category mapping for complementary items
+          const COMPLEMENTARY_MAP: Record<string, string[]> = {
+            'CPU': ['Cooling', 'Generic Cooler', 'Thermal Paste', 'Thermal Pad', 'RAM', 'Motherboard'],
+            'Motherboard': ['CPU', 'RAM', 'Case', 'Storage'],
+            'GPU': ['PSU', 'Monitor', 'DisplayCable'],
+            'Case': ['Cooling', 'Case Fan', 'PSU'],
+            'Monitor': ['GPU', 'Peripherals', 'Keyboard', 'Mouse'],
+            'Storage': ['Motherboard', 'Case'],
+            'PSU': ['GPU', 'Case', 'Motherboard'],
+            'Cooling': ['CPU', 'Thermal Paste', 'Case'],
+            'RAM': ['CPU', 'Motherboard']
+          };
+
+          const complementaryCats = COMPLEMENTARY_MAP[data.category] || COMPLEMENTARY_MAP[data.parent_category] || [];
+
+          // Fetch similar products (Substitutes)
+          const { data: similar } = await supabase
             .from('products')
             .select('*')
             .eq('category', data.category)
+            .eq('parent_category', data.parent_category)
             .neq('id', data.id)
             .eq('is_unlisted', false)
             .limit(4);
           
-          if (related) setRelatedProducts(related);
+          if (similar) setSimilarProducts(similar);
+
+          // Fetch frequently bought together (Complementary)
+          if (complementaryCats.length > 0) {
+            const { data: frequent } = await supabase
+              .from('products')
+              .select('*')
+              .in('category', complementaryCats)
+              .eq('is_unlisted', false)
+              .limit(4);
+            
+            if (frequent) setFrequentlyBoughtTogether(frequent);
+          }
         }
       } catch (error) {
         console.error('Error fetching product:', error);
@@ -113,17 +144,12 @@ export const ProductDetails: React.FC = () => {
             >
               {displayImage ? (
                 <>
-                  <img 
-                    src={getOptimizedImageUrl(displayImage, { width: 800, height: 800 })} 
+                  <ProductImage 
+                    src={displayImage} 
                     alt={product.name} 
                     className="w-full h-full object-contain transition-transform duration-200"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      if (displayImage && target.src !== displayImage) {
-                        target.src = displayImage;
-                      }
-                    }}
+                    width={800}
+                    height={800}
                   />
                   {isZooming && (
                     <div 
@@ -165,18 +191,12 @@ export const ProductDetails: React.FC = () => {
                     (activeImage === img || (!activeImage && idx === 0)) ? "border-cyan ring-1 ring-cyan" : "border-slate-200 hover:border-cyan/50"
                   )}
                 >
-                  <img 
-                    src={getOptimizedImageUrl(img, { width: 150, height: 150 })} 
+                  <ProductImage 
+                    src={img} 
                     alt="" 
                     className="w-full h-full object-cover" 
-                    referrerPolicy="no-referrer" 
-                    loading="lazy"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      if (img && target.src !== img) {
-                        target.src = img;
-                      }
-                    }}
+                    width={150}
+                    height={150}
                   />
                 </button>
               ))}
@@ -297,7 +317,7 @@ export const ProductDetails: React.FC = () => {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="grid grid-cols-1 sm:grid-cols-2 gap-6"
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-6 h-fit"
                   >
                     {Object.entries(product.specs || {}).map(([key, value]) => (
                       <div key={key} className="border-b border-slate-100 pb-4">
@@ -305,7 +325,32 @@ export const ProductDetails: React.FC = () => {
                         <div className="font-bold text-navy">{value as string}</div>
                       </div>
                     ))}
-                    {Object.keys(product.specs || {}).length === 0 && (
+                    
+                    {product.detailed_specs && (
+                      <div className="mt-12 pt-12 border-t border-slate-100 w-full col-span-2 text-left">
+                        <h4 className="text-sm font-black text-navy uppercase tracking-widest mb-6 flex items-center gap-2">
+                          <Info size={16} className="text-cyan" />
+                          Detailed Overview
+                        </h4>
+                        <div className="text-slate-600 space-y-4 max-w-none text-base leading-relaxed
+                          [&_h1]:text-2xl [&_h1]:font-black [&_h1]:text-navy [&_h1]:uppercase [&_h1]:tracking-tighter [&_h1]:mb-6 [&_h1]:mt-8
+                          [&_h2]:text-xl [&_h2]:font-black [&_h2]:text-navy [&_h2]:uppercase [&_h2]:tracking-tighter [&_h2]:mb-4 [&_h2]:mt-6
+                          [&_h3]:text-lg [&_h3]:font-black [&_h3]:text-navy [&_h3]:uppercase [&_h3]:tracking-tighter [&_h3]:mb-3 [&_h3]:mt-4
+                          [&_p]:mb-4
+                          [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:space-y-2 [&_ul]:mb-4
+                          [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:space-y-2 [&_ol]:mb-4
+                          [&_li]:text-slate-600
+                          [&_strong]:text-navy [&_strong]:font-black
+                          [&_blockquote]:border-l-4 [&_blockquote]:border-cyan [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:bg-slate-50 [&_blockquote]:py-2 [&_blockquote]:rounded-r-sm
+                          [&_code]:bg-slate-100 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-cyan [&_code]:font-mono [&_code]:text-sm
+                          [&_pre]:bg-slate-950 [&_pre]:p-4 [&_pre]:rounded-sm [&_pre]:overflow-x-auto [&_pre]:my-6
+                          [&_pre_code]:bg-transparent [&_pre_code]:text-white [&_pre_code]:p-0
+                        ">
+                          <ReactMarkdown>{product.detailed_specs}</ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
+                    {Object.keys(product.specs || {}).length === 0 && !product.detailed_specs && (
                       <div className="col-span-2 text-center py-12 text-slate-400 font-medium">
                         No detailed specifications available for this item.
                       </div>
@@ -374,19 +419,36 @@ export const ProductDetails: React.FC = () => {
       </div>
 
       {/* Frequently Bought Together */}
-      {relatedProducts.length > 0 && (
+      {frequentlyBoughtTogether.length > 0 && (
         <section className="mt-32">
           <div className="flex items-center justify-between mb-12">
             <div>
               <h2 className="text-3xl font-black text-navy uppercase tracking-tighter">FREQUENTLY <span className="text-cyan">BOUGHT TOGETHER</span></h2>
-              <p className="text-slate-500 font-medium mt-1">Complete your build with these compatible components.</p>
+              <p className="text-slate-500 font-medium mt-1">Complete your build with these complementary components.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {frequentlyBoughtTogether.map(rel => (
+              <ProductCard key={rel.id} product={rel} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* See Similar Items */}
+      {similarProducts.length > 0 && (
+        <section className="mt-24">
+          <div className="flex items-center justify-between mb-12">
+            <div>
+              <h2 className="text-3xl font-black text-navy uppercase tracking-tighter">SEE <span className="text-cyan">SIMILAR</span> ITEMS</h2>
+              <p className="text-slate-500 font-medium mt-1">Explore other options in this category.</p>
             </div>
             <Link to="/products" className="text-navy font-black text-[10px] uppercase tracking-widest hover:text-cyan transition-colors border-b-2 border-navy hover:border-cyan pb-1">
               View All Components
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {relatedProducts.map(rel => (
+            {similarProducts.map(rel => (
               <ProductCard key={rel.id} product={rel} />
             ))}
           </div>
