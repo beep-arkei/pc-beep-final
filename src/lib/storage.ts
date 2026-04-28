@@ -212,22 +212,22 @@ export const getOptimizedImageUrl = (
     return DEFAULT_PLACEHOLDER;
   }
 
+  // If we already have a transformation or it's not a standard Supabase public URL, return as is
   if (!url.includes('supabase.co/storage/v1/object/public/')) {
+    return url;
+  }
+
+  // Check if we should even transform. Some projects don't have this enabled.
+  // We'll return the original URL if no specific dimensions are requested.
+  if (!options.width && !options.height) {
     return url;
   }
 
   const { width, height, quality = 80 } = options;
   
   // Convert object URL to render URL
-  // From: https://<id>.supabase.co/storage/v1/object/public/<bucket>/<path>
-  // To:   https://<id>.supabase.co/storage/v1/render/image/public/<bucket>/<path>
   const renderUrl = url.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
   
-  // If no options provided, return original URL to avoid transformation overhead/errors
-  if (!options.width && !options.height) {
-    return url;
-  }
-
   const params = new URLSearchParams();
   if (width) params.append('width', width.toString());
   if (height) params.append('height', height.toString());
