@@ -1637,7 +1637,7 @@ export const AdminDashboard: React.FC = () => {
                             <div className="flex gap-3 overflow-x-auto pb-4">
                               {refund.evidence_urls.map((url, i) => (
                                 <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="w-32 h-32 rounded-sm overflow-hidden border border-slate-800 shrink-0 hover:border-cyan transition-colors group relative">
-                                  <img src={url} alt="Evidence" className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />
+                                  <img src={url} alt="Evidence" className="w-full h-full object-cover group-hover:opacity-80 transition-all" />
                                   <div className="absolute inset-0 bg-cyan/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                                 </a>
                               ))}
