@@ -217,22 +217,7 @@ export const getOptimizedImageUrl = (
     return url;
   }
 
-  // Check if we should even transform. Some projects don't have this enabled.
-  // We'll return the original URL if no specific dimensions are requested.
-  if (!options.width && !options.height) {
-    return url;
-  }
-
-  const { width, height, quality = 80 } = options;
-  
-  // Convert object URL to render URL
-  const renderUrl = url.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
-  
-  const params = new URLSearchParams();
-  if (width) params.append('width', width.toString());
-  if (height) params.append('height', height.toString());
-  params.append('quality', quality.toString());
-  params.append('resize', 'contain');
-
-  return `${renderUrl}?${params.toString()}`;
+  // For now, let's just return the original URL to ensure maximum compatibility 
+  // since some projects don't have Supabase transformation enabled.
+  return url;
 };
